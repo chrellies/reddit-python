@@ -1,0 +1,80 @@
+import pandas as pd
+import requests
+import json
+import csv
+import time
+import datetime as dt
+
+start_epoch=int(dt.datetime(2015, 10, 6).timestamp())
+end_epoch=int(dt.datetime(2019, 10, 15).timestamp())
+
+query = "Liverpool"
+before = end_epoch
+after = start_epoch
+excludedsubs = "talkativepeople"
+    
+
+def getPushshiftData(query, after, before, excludedsubs):
+    url = 'https://api.pushshift.io/reddit/search/submission/?title='+str(query)+'&size=100000&after='+str(after)+'&before='+str(before)+'&subreddit=!'+str(excludedsubs)
+    print(url)
+    r = requests.get(url)
+    data = json.loads(r.text)
+    return data['data']
+    
+def collectSubData(subm):
+    subData = list() #list to store data points
+    title = subm['title']
+    url = subm['url']
+    try:
+        flair = subm['link_flair_text']
+    except KeyError:
+        flair = "NaN"    
+    author = subm['author']
+    sub_id = subm['id']
+    score = subm['score']
+    created = dt.datetime.fromtimestamp(subm['created_utc']) #1520561700.0
+    numComms = subm['num_comments']
+    permalink = subm['permalink']
+    subreddit = subm['subreddit']
+    
+    subData.append((sub_id,title,url,author,score,created,numComms,permalink,subreddit))
+    subStats[sub_id] = subData
+subCount = 0
+subStats = {}
+data = getPushshiftData(query, after, before, excludedsubs)
+
+while len(data) > 0:
+    for submission in data:
+        collectSubData(submission)
+        subCount+=1
+
+    print(len(data))
+    print(str(dt.datetime.fromtimestamp(data[-1]['created_utc'])))
+    after = data[-1]['created_utc']
+    data = getPushshiftData(query, after, before, excludedsubs)
+
+posts = pd.DataFrame(data,columns=['title', 'score', 'id', 'subreddit', 'url', 'num_comments', 'body', 'created'])
+print(len(data))
+print(data)
+print(str(len(subStats)) + " submissions have added to list")
+print("1st entry is:")
+print(list(subStats.values())[0][0][1] + " created: " + str(list(subStats.values())[0][0][5]))
+print("Last entry is:")
+print(list(subStats.values())[-1][0][1] + " created: " + str(list(subStats.values())[-1][0][5]))
+
+def updateSubs_file():
+    upload_count = 0
+    location = "data"
+    print("input filename of submission file, please add .csv")
+    filename = "Liverpool2.csv"
+    file = location + filename
+    with open(file, 'w', newline='', encoding='utf-8') as file: 
+        a = csv.writer(file, delimiter=',')
+        headers = ["Post ID","Title","Url","Author","Score","Publish Date","Total No. of Comments","Permalink","Flair","Subreddit"]
+        a.writerow(headers)
+        for sub in subStats:
+            a.writerow(subStats[sub][0])
+            upload_count+=1
+            
+        print(str(upload_count) + " submissions have been uploaded")
+updateSubs_file()
